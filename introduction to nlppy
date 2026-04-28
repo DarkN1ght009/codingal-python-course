@@ -1,0 +1,58 @@
+import requests
+# from config import HF_API_KEY # Ensure your config file exists
+
+MODEL_ID = "facebook/bart-large-mnli"
+API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+HEADERS = {"Authorization": f"Bearer {HF_API_KEY}"}
+TOPICS = ["Sports", "Technology", "Business", "Politics", "Health"]
+
+def ask_hf(headline: str):
+    """Sends a headline to Hugging Face for Zero-Shot Classification."""
+    payload = {
+        "inputs": headline, 
+        "parameters": {"candidate_labels": TOPICS}
+    }
+    try:
+        response = requests.post(API_URL, headers=HEADERS, json=payload, timeout=30)
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
+
+def best_topic(preds: list):
+    """Finds the dictionary with the highest score in a list of predictions."""
+    best = max(preds, key=lambda x: x["score"])
+    return best["label"], best["score"]
+
+def bar(score: float) -> str:
+    """Creates a visual ASCII progress bar based on the confidence score."""
+    blocks = int((score * 100) // 10)
+    return "█" * blocks + "░" * (10 - blocks)
+
+def show(headline: str, result: dict):
+    """Formats and prints the results including a visual bar and top 3 guesses."""
+    if "error" in result:
+        print(f"Error: {result['error']}")
+        return
+
+    # Convert HF parallel lists into a list of dictionaries
+    preds = [
+        {"label": label, "score": score} 
+        for label, score in zip(result["labels"], result["scores"])
+    ]
+    
+    top_label, top_score = best_topic(preds)
+
+    # UI Header
+    print("\n" + "=" * 60)
+    print("📰 News Topic Classifier")
+    print("=" * 60)
+    
+    print(f"Headline: {headline}")
+    print(f"Best topic: {top_label}")
+    print(f"Confidence: {round(top_score * 100, 1)}% [{bar(top_score)}]")
+
+    # Top 3 guesses
+    print("\nTop 3 guesses:")
+    top3 = sorted(preds, key=lambda x: x["score"], reverse=True)[:3]
+    for item in top3:
+        print(f"- {item['label']}: {item['score']:.2%}")
